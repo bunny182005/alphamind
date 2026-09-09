@@ -1,6 +1,6 @@
 # AlphaMind AI: Multi-Agent LLM Financial Trading Framework
 
-## Overview of the Project 
+## Overview
 
 AlphaMind AI is a multi-agent trading framework that mirrors the dynamics of real-world trading firms. By deploying specialized LLM-powered agents — fundamental analysts, sentiment experts, technical analysts, a trader, and a risk management team — the platform collaboratively evaluates market conditions and informs trading decisions. These agents engage in dynamic discussions to pinpoint the optimal strategy.
 
