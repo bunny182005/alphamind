@@ -383,46 +383,38 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
         if active_agents:
             teams[team] = active_agents
 
+    def render_status_cell(status: str):
+        if status == "in_progress":
+            return Spinner("dots", text="[cyan]in progress[/cyan]", style="bold cyan")
+        icon = STATUS_ICON.get(status, "○")
+        color = STATUS_COLOR.get(status, "white")
+        label = status.replace("_", " ")
+        return f"[{color}]{icon} {label}[/{color}]"
+
     for team, agents in teams.items():
         # Add first agent with team name
         first_agent = agents[0]
         status = message_buffer.agent_status.get(first_agent, "pending")
-        if status == "in_progress":
-            spinner = Spinner(
-                "dots", text="[blue]in_progress[/blue]", style="bold cyan"
-            )
-            status_cell = spinner
-        else:
-            status_color = {
-                "pending": "yellow",
-                "completed": "green",
-                "error": "red",
-            }.get(status, "white")
-            status_cell = f"[{status_color}]{status}[/{status_color}]"
-        progress_table.add_row(team, first_agent, status_cell)
+        progress_table.add_row(team, first_agent, render_status_cell(status))
 
         # Add remaining agents in team
         for agent in agents[1:]:
             status = message_buffer.agent_status.get(agent, "pending")
-            if status == "in_progress":
-                spinner = Spinner(
-                    "dots", text="[blue]in_progress[/blue]", style="bold cyan"
-                )
-                status_cell = spinner
-            else:
-                status_color = {
-                    "pending": "yellow",
-                    "completed": "green",
-                    "error": "red",
-                }.get(status, "white")
-                status_cell = f"[{status_color}]{status}[/{status_color}]"
-            progress_table.add_row("", agent, status_cell)
+            progress_table.add_row("", agent, render_status_cell(status))
 
-        # Add horizontal line after each team
-        progress_table.add_row("─" * 20, "─" * 20, "─" * 20, style="dim")
+        # Add a light divider after each team
+        progress_table.add_row("", "", "", style="dim")
 
+    agents_completed_hdr = sum(
+        1 for s in message_buffer.agent_status.values() if s == "completed"
+    )
+    agents_total_hdr = len(message_buffer.agent_status) or 1
+    progress_title = Text.assemble(
+        "Progress  ",
+        render_progress_bar(agents_completed_hdr, agents_total_hdr, width=16),
+    )
     layout["progress"].update(
-        Panel(progress_table, title="Progress", border_style="cyan", padding=(1, 2))
+        Panel(progress_table, title=progress_title, border_style="cyan", padding=(1, 2))
     )
 
     # Messages panel showing recent messages and tool calls
@@ -436,7 +428,7 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
         padding=(0, 1),  # Add some padding between columns
     )
     messages_table.add_column("Time", style="cyan", width=8, justify="center")
-    messages_table.add_column("Type", style="green", width=10, justify="center")
+    messages_table.add_column("Type", style="green", width=11, justify="center")
     messages_table.add_column(
         "Content", style="white", no_wrap=False, ratio=1
     )  # Make content column expand
@@ -469,7 +461,8 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
     for timestamp, msg_type, content in recent_messages:
         # Format content with word wrapping
         wrapped_content = Text(content, overflow="fold")
-        messages_table.add_row(timestamp, msg_type, wrapped_content)
+        type_label = f"{MESSAGE_ICON.get(msg_type, '•')} {msg_type}"
+        messages_table.add_row(timestamp, type_label, wrapped_content)
 
     layout["messages"].update(
         Panel(
@@ -511,33 +504,42 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
     reports_completed = message_buffer.get_completed_reports_count()
     reports_total = len(message_buffer.report_sections)
 
-    # Build stats parts
-    stats_parts = [f"Agents: {agents_completed}/{agents_total}"]
+    # Build the footer as: [agents bar] · chips · [reports bar]
+    footer_line = Text()
+    footer_line.append("Agents ", style="bold")
+    footer_line.append(render_progress_bar(agents_completed, agents_total, width=14))
+    footer_line.append("   ")
 
     # LLM and tool stats from callback handler
     if stats_handler:
         stats = stats_handler.get_stats()
-        stats_parts.append(f"LLM: {stats['llm_calls']}")
-        stats_parts.append(f"Tools: {stats['tool_calls']}")
+        footer_line.append(f"LLM {stats['llm_calls']}", style="bold cyan")
+        footer_line.append("  ·  ")
+        footer_line.append(f"Tools {stats['tool_calls']}", style="bold magenta")
+        footer_line.append("  ·  ")
 
         # Token display with graceful fallback
         if stats["tokens_in"] > 0 or stats["tokens_out"] > 0:
-            tokens_str = f"Tokens: {format_tokens(stats['tokens_in'])}\u2191 {format_tokens(stats['tokens_out'])}\u2193"
+            tokens_str = f"{format_tokens(stats['tokens_in'])}\u2191 {format_tokens(stats['tokens_out'])}\u2193"
         else:
-            tokens_str = "Tokens: --"
-        stats_parts.append(tokens_str)
+            tokens_str = "--"
+        footer_line.append(f"Tokens {tokens_str}", style="bold yellow")
+        footer_line.append("   ")
 
-    stats_parts.append(f"Reports: {reports_completed}/{reports_total}")
+    footer_line.append("Reports ", style="bold")
+    footer_line.append(render_progress_bar(reports_completed, reports_total, width=14))
 
     # Elapsed time
     if start_time:
         elapsed = time.time() - start_time
-        elapsed_str = f"\u23f1 {int(elapsed // 60):02d}:{int(elapsed % 60):02d}"
-        stats_parts.append(elapsed_str)
+        footer_line.append("   ")
+        footer_line.append(
+            f"⏱ {int(elapsed // 60):02d}:{int(elapsed % 60):02d}", style="bold white"
+        )
 
     stats_table = Table(show_header=False, box=None, padding=(0, 2), expand=True)
     stats_table.add_column("Stats", justify="center")
-    stats_table.add_row(" | ".join(stats_parts))
+    stats_table.add_row(footer_line)
 
     layout["footer"].update(Panel(stats_table, border_style="grey50"))
 
@@ -548,22 +550,45 @@ def get_user_selections():
     with open(Path(__file__).parent / "static" / "welcome.txt", encoding="utf-8") as f:
         welcome_ascii = f.read()
 
-    # Create welcome box content
-   # Create welcome box content
-    welcome_content = f"{welcome_ascii}\n"
-    welcome_content += "[bold green]AlphaMind AI: Multi-Agents LLM Financial Trading Framework - CLI[/bold green]\n\n"
-    welcome_content += "[bold]Workflow Steps:[/bold]\n"
-    welcome_content += "I. Analyst Team → II. Research Team → III. Trader → IV. Risk Management → V. Portfolio Management\n\n"
+    # Color each line of the figlet banner with a subtle green gradient so it
+    # doesn't read as a flat block of text on dark terminals.
+    banner_gradient = ["bright_green", "green3", "spring_green3", "green", "dark_green"]
+    banner = Text()
+    banner_lines = welcome_ascii.rstrip("\n").split("\n")
+    for i, line in enumerate(banner_lines):
+        banner.append(line + "\n", style=f"bold {banner_gradient[i % len(banner_gradient)]}")
 
+    workflow = Table(show_header=False, box=None, padding=(0, 1), expand=True)
+    for _ in range(9):
+        workflow.add_column(justify="center")
+    workflow.add_row(
+        "[bold cyan]I. Analysts[/bold cyan]", "[dim]→[/dim]",
+        "[bold magenta]II. Research[/bold magenta]", "[dim]→[/dim]",
+        "[bold yellow]III. Trader[/bold yellow]", "[dim]→[/dim]",
+        "[bold red]IV. Risk[/bold red]", "[dim]→[/dim]",
+        "[bold green]V. Portfolio[/bold green]",
+    )
+
+    welcome_group = Table.grid(padding=(0, 0))
+    welcome_group.add_row(Align.center(banner))
+    welcome_group.add_row(
+        Align.center(
+            "[bold green3]Multi-Agent LLM Financial Trading Framework — CLI[/bold green3]"
+        )
+    )
+    welcome_group.add_row(Text(""))
+    welcome_group.add_row(Rule(style="dim green"))
+    welcome_group.add_row(workflow)
 
     # Create and center the welcome box
     welcome_box = Panel(
-    welcome_content,
-    border_style="green",
-    padding=(1, 2),
-    title="Welcome to AlphaMind AI",
-    subtitle="Multi-Agents LLM Financial Trading Framework",
-)
+        welcome_group,
+        border_style="green3",
+        box=box.DOUBLE,
+        padding=(1, 2),
+        title="◆ Welcome to AlphaMind AI ◆",
+        subtitle="Multi-Agent LLM Financial Trading Framework",
+    )
     console.print(Align.center(welcome_box))
     console.print()
     console.print()  # Add vertical space before announcements
@@ -817,7 +842,29 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
 def display_complete_report(final_state):
     """Display the complete analysis report sequentially (avoids truncation)."""
     console.print()
-    console.print(Rule("Complete Analysis Report", style="bold green"))
+    console.print(Rule("[bold green3]◆ Complete Analysis Report ◆[/bold green3]", style="green3"))
+
+    # Quick checklist of which stages produced output, so the reader knows
+    # what's coming before scrolling through the full sections below.
+    risk_state = final_state.get("risk_debate_state", {}) or {}
+    debate_state = final_state.get("investment_debate_state", {}) or {}
+    checklist = [
+        ("Analyst Team", any(
+            final_state.get(k) for k in
+            ("market_report", "sentiment_report", "news_report", "fundamentals_report")
+        )),
+        ("Research Team", bool(debate_state.get("judge_decision"))),
+        ("Trading Team", bool(final_state.get("trader_investment_plan"))),
+        ("Risk Management", bool(risk_state.get("judge_decision"))),
+    ]
+    summary = Table(show_header=False, box=None, padding=(0, 2), expand=True)
+    for _ in checklist:
+        summary.add_column(justify="center")
+    summary.add_row(*[
+        f"[{'green3' if done else 'grey42'}]{'●' if done else '○'} {name}[/]"
+        for name, done in checklist
+    ])
+    console.print(Panel(summary, border_style="dim green", padding=(0, 1)))
 
     # I. Analyst Team Reports
     analysts = []
@@ -830,49 +877,47 @@ def display_complete_report(final_state):
     if final_state.get("fundamentals_report"):
         analysts.append(("Fundamentals Analyst", final_state["fundamentals_report"]))
     if analysts:
-        console.print(Panel("[bold]I. Analyst Team Reports[/bold]", border_style="cyan"))
+        console.print(Rule("[bold cyan]I · Analyst Team Reports[/bold cyan]", style="cyan"))
         for title, content in analysts:
-            console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
+            console.print(Panel(Markdown(content), title=f"🤖 {title}", border_style="blue", padding=(1, 2)))
 
     # II. Research Team Reports
-    if final_state.get("investment_debate_state"):
-        debate = final_state["investment_debate_state"]
+    if debate_state:
         research = []
-        if debate.get("bull_history"):
-            research.append(("Bull Researcher", debate["bull_history"]))
-        if debate.get("bear_history"):
-            research.append(("Bear Researcher", debate["bear_history"]))
-        if debate.get("judge_decision"):
-            research.append(("Research Manager", debate["judge_decision"]))
+        if debate_state.get("bull_history"):
+            research.append(("Bull Researcher", debate_state["bull_history"]))
+        if debate_state.get("bear_history"):
+            research.append(("Bear Researcher", debate_state["bear_history"]))
+        if debate_state.get("judge_decision"):
+            research.append(("Research Manager", debate_state["judge_decision"]))
         if research:
-            console.print(Panel("[bold]II. Research Team Decision[/bold]", border_style="magenta"))
+            console.print(Rule("[bold magenta]II · Research Team Decision[/bold magenta]", style="magenta"))
             for title, content in research:
-                console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
+                console.print(Panel(Markdown(content), title=f"🤖 {title}", border_style="blue", padding=(1, 2)))
 
     # III. Trading Team
     if final_state.get("trader_investment_plan"):
-        console.print(Panel("[bold]III. Trading Team Plan[/bold]", border_style="yellow"))
-        console.print(Panel(Markdown(final_state["trader_investment_plan"]), title="Trader", border_style="blue", padding=(1, 2)))
+        console.print(Rule("[bold yellow]III · Trading Team Plan[/bold yellow]", style="yellow"))
+        console.print(Panel(Markdown(final_state["trader_investment_plan"]), title="🤖 Trader", border_style="blue", padding=(1, 2)))
 
     # IV. Risk Management Team
-    if final_state.get("risk_debate_state"):
-        risk = final_state["risk_debate_state"]
+    if risk_state:
         risk_reports = []
-        if risk.get("aggressive_history"):
-            risk_reports.append(("Aggressive Analyst", risk["aggressive_history"]))
-        if risk.get("conservative_history"):
-            risk_reports.append(("Conservative Analyst", risk["conservative_history"]))
-        if risk.get("neutral_history"):
-            risk_reports.append(("Neutral Analyst", risk["neutral_history"]))
+        if risk_state.get("aggressive_history"):
+            risk_reports.append(("Aggressive Analyst", risk_state["aggressive_history"]))
+        if risk_state.get("conservative_history"):
+            risk_reports.append(("Conservative Analyst", risk_state["conservative_history"]))
+        if risk_state.get("neutral_history"):
+            risk_reports.append(("Neutral Analyst", risk_state["neutral_history"]))
         if risk_reports:
-            console.print(Panel("[bold]IV. Risk Management Team Decision[/bold]", border_style="red"))
+            console.print(Rule("[bold red]IV · Risk Management Team Decision[/bold red]", style="red"))
             for title, content in risk_reports:
-                console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
+                console.print(Panel(Markdown(content), title=f"🤖 {title}", border_style="blue", padding=(1, 2)))
 
         # V. Portfolio Manager Decision
-        if risk.get("judge_decision"):
-            console.print(Panel("[bold]V. Portfolio Manager Decision[/bold]", border_style="green"))
-            console.print(Panel(Markdown(risk["judge_decision"]), title="Portfolio Manager", border_style="blue", padding=(1, 2)))
+        if risk_state.get("judge_decision"):
+            console.print(Rule("[bold green3]V · Portfolio Manager Decision[/bold green3]", style="green3"))
+            console.print(Panel(Markdown(risk_state["judge_decision"]), title="🤖 Portfolio Manager", border_style="green3", padding=(1, 2)))
 
 
 def update_research_team_status(status):

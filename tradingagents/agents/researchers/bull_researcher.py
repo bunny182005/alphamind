@@ -10,7 +10,7 @@ def create_bull_researcher(llm):
         investment_debate_state = state["investment_debate_state"]
         history = investment_debate_state.get("history", "")
         bull_history = investment_debate_state.get("bull_history", "")
-
+ 
         current_response = opponent_argument_or_opening(
             investment_debate_state.get("current_response", ""), "bear analyst"
         )
