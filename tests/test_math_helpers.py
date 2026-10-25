@@ -1,5 +1,5 @@
 """Tests for financial calculations."""
-from tradingagents.utils.math_helpers import calculate_simple_return, calculate_sharpe_ratio
+from tradingagents.utils.math_helpers import calculate_sharpe_ratio, calculate_simple_return
 
 
 def test_calculate_simple_return():

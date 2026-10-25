@@ -1,6 +1,6 @@
 """Unit tests for server schemas and models."""
-from server.models import HealthResponse, StreamEvent
 from server.constants import EVENT_DONE
+from server.models import HealthResponse, StreamEvent
 
 
 def test_health_response_defaults():
