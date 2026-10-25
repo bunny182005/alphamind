@@ -13,17 +13,16 @@ import logging
 import queue
 import threading
 import traceback
-from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager, suppress
+from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-
-# ── LangChain callback — intercepts LLM/tool events without touching agent code ──
 from langchain_core.callbacks import BaseCallbackHandler
+from pydantic import BaseModel
 
 # ── TradingAgents public API (unchanged, identical to main.py) ──
 from tradingagents.default_config import DEFAULT_CONFIG
@@ -75,10 +74,8 @@ class StreamingCallbackHandler(BaseCallbackHandler):
 
     def on_llm_end(self, response: Any, **kwargs):
         content = ""
-        try:
+        with suppress(Exception):
             content = response.generations[0][0].text
-        except Exception:
-            pass
         _push(self.run_id, "llm_end", {"agent": self._current_agent, "content": content})
 
     def on_llm_error(self, error: Exception, **kwargs):
@@ -160,18 +157,23 @@ async def _event_generator(run_id: str) -> AsyncGenerator[str, None]:
     q = _get_queue(run_id)
     loop = asyncio.get_event_loop()
 
-    while True:
-        try:
-            item = await loop.run_in_executor(None, lambda: q.get(timeout=0.1))
-        except Exception:
-            await asyncio.sleep(0.05)
-            continue
+    try:
+        while True:
+            try:
+                item = await loop.run_in_executor(None, lambda: q.get(timeout=0.1))
+            except Exception:
+                await asyncio.sleep(0.05)
+                continue
 
-        payload = json.dumps(item)
-        yield f"data: {payload}\n\n"
+            payload = json.dumps(item)
+            yield f"data: {payload}\n\n"
 
-        if item["type"] in ("done", "fatal_error"):
-            break
+            if item["type"] in ("done", "fatal_error"):
+                break
+    finally:
+        # Evict the queue to prevent unbounded memory growth
+        with _run_lock:
+            _run_queues.pop(run_id, None)
 
 
 @app.get("/api/stream/{run_id}")
@@ -245,7 +247,7 @@ async def propagate(req: PropagateRequest):
         result = await loop.run_in_executor(None, _run_propagate_sync, req)
         return result
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -271,7 +273,7 @@ async def reflect(req: ReflectRequest):
         result = await loop.run_in_executor(None, _reflect_sync)
         return result
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.get("/health")
