@@ -56,7 +56,15 @@ def _coerce_optional_float(value):
 
 
 class PortfolioRating(str, Enum):
-    """5-tier rating used by the Research Manager and Portfolio Manager."""
+    """5-tier rating used by the Research Manager and Portfolio Manager.
+
+    Represents decisive, risk-adjusted directional conviction:
+    - Buy: Decisive bull conviction; long-term upside and catalysts heavily outweigh risks.
+    - Overweight: Constructive bias; favorable risk-reward skew warrants increased exposure.
+    - Hold: Strict market indifference ONLY where bull and bear cases are truly balanced.
+    - Underweight: Bearish bias; downside risks or headwinds warrant trimming exposure.
+    - Sell: Decisive bear conviction; high probability of material underperformance.
+    """
 
     BUY = "Buy"
     OVERWEIGHT = "Overweight"
@@ -96,11 +104,12 @@ class ResearchPlan(BaseModel):
     recommendation: PortfolioRating = Field(
         description=(
             "The investment recommendation. Exactly one of Buy / Overweight / "
-            "Hold / Underweight / Sell. Choose Hold when the evidence is "
-            "balanced, materially conflicting, ambiguous, or insufficient to "
-            "justify changing exposure; otherwise commit to the side with the "
-            "clearly stronger arguments. Do not pick a direction merely to be "
-            "decisive."
+            "Hold / Underweight / Sell based on asymmetric expected value. Identify "
+            "which side (bull or bear) offers higher probability × magnitude. If "
+            "bull expected value dominates, pick Buy or Overweight; if bear "
+            "expected value dominates, pick Underweight or Sell. Reserve Hold "
+            "strictly for true market indifference where evidence is genuinely "
+            "equivalent in weight and magnitude, not merely when conflicting signals exist."
         ),
     )
     rationale: str = Field(
@@ -221,10 +230,12 @@ class PortfolioDecision(BaseModel):
     rating: PortfolioRating = Field(
         description=(
             "The final position rating. Exactly one of Buy / Overweight / Hold / "
-            "Underweight / Sell, picked based on the analysts' debate. Choose "
-            "Hold when the case is balanced, materially conflicting, ambiguous, "
-            "or insufficient to justify changing exposure, rather than forcing a "
-            "direction to appear decisive."
+            "Underweight / Sell based on asymmetric risk-reward and expected value. "
+            "Commit decisively to Buy or Overweight if bull catalysts and upside "
+            "outweigh risks, or Underweight/Sell if downside risks and headwinds dominate. "
+            "Reserve Hold strictly for true market indifference where bull and bear "
+            "cases are mathematically equivalent; do not default to Hold on minor "
+            "conflicting signals."
         ),
     )
     executive_summary: str = Field(

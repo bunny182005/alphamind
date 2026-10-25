@@ -23,20 +23,26 @@ def create_research_manager(llm):
 
         investment_debate_state = state["investment_debate_state"]
 
-        prompt = f"""As the Research Manager and debate facilitator, your role is to critically evaluate this round of debate and deliver a clear, actionable investment plan for the trader.
+        prompt = f"""As the Research Manager and debate facilitator, your role is to critically evaluate this round of debate and deliver a decisive, conviction-led investment plan for the trader.
 
 {instrument_context}
 
 ---
 
-**Rating Scale** (use exactly one):
-- **Buy**: Strong conviction in the bull thesis; recommend taking or growing the position
-- **Overweight**: Constructive view; recommend gradually increasing exposure
-- **Hold**: Balanced view; recommend maintaining the current position
-- **Underweight**: Cautious view; recommend trimming exposure
-- **Sell**: Strong conviction in the bear thesis; recommend exiting or avoiding the position
+**Rating Scale** (use exactly one, based on asymmetric expected value):
+- **Buy**: Strong conviction in the bull thesis; bull catalysts and long-term fundamentals clearly outweigh near-term risks — recommend taking or growing the position aggressively with defined risk stops
+- **Overweight**: Constructive skew; primary trend and weight of evidence favor bulls, even if minor headwinds exist — recommend gradually increasing exposure
+- **Hold**: Strict market indifference ONLY — reserve for situations where bull and bear arguments are mathematically equivalent in probability AND magnitude; do NOT declare a stalemate on minor conflicting points
+- **Underweight**: Bearish skew — negative technical structure, macro headwinds, or fundamental deterioration make reducing exposure the rational risk-adjusted action
+- **Sell**: Strong conviction in the bear thesis; recommend exiting or avoiding the position with urgency
 
-Commit to a directional stance only when the debate's strongest arguments clearly warrant one. Choose Hold when the evidence is balanced, materially conflicting, ambiguous, or insufficient to justify changing exposure; do not manufacture a direction merely to appear decisive. Weigh the bull and bear cases on their merits, independent of which side spoke first or last.
+**Decision Framework** (apply before choosing a rating):
+1. Identify the single STRONGEST argument from the bull side and the single STRONGEST argument from the bear side.
+2. Assess: which scenario — the bull case or the bear case — has higher probability × magnitude of outcome?
+3. If the bull expected value is higher → **Buy** or **Overweight**.
+4. If the bear expected value is higher → **Underweight** or **Sell**.
+5. Reserve **Hold** ONLY when the two sides are genuinely equivalent — not when conflicting signals exist but one side clearly has better asymmetry.
+6. Minor contradictions (e.g., strong fundamentals plus a short-term technical pullback) should NOT produce a Hold unless they are equally strong and unresolvable.
 
 ---
 

@@ -40,29 +40,36 @@ def create_portfolio_manager(llm):
             else ""
         )
 
-        prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
+        prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver a decisive, conviction-led trading decision.
 
 {instrument_context}
 
 ---
 
-**Rating Scale** (use exactly one):
-- **Buy**: Strong conviction to enter or add to position
-- **Overweight**: Favorable outlook, gradually increase exposure
-- **Hold**: Maintain current position, no action needed
-- **Underweight**: Reduce exposure, take partial profits
-- **Sell**: Exit position or avoid entry
+**Rating Scale** (use exactly one, based on asymmetric risk-reward):
+- **Buy**: Strong conviction; bull catalysts and long-term fundamentals clearly outweigh near-term risks — enter or add aggressively with defined stop levels
+- **Overweight**: Favorable risk-reward skew; primary trend and evidence favor bulls — gradually increase exposure with risk management
+- **Hold**: Strict market indifference ONLY — where bull and bear evidence are truly equivalent in weight and no actionable skew exists; do NOT choose Hold simply because some conflicting signals exist
+- **Underweight**: Bearish skew — technicals, macro headwinds, high debt or negative catalysts represent active downside risk — reduce exposure and take partial profits
+- **Sell**: Clear negative expected value — evidence strongly supports imminent underperformance — exit or avoid
+
+**Decision Framework** (apply in order):
+1. Identify the STRONGEST argument on each side, ignoring minor noise.
+2. Weigh asymmetric risk-reward: which scenario (bull or bear) offers higher probability × magnitude?
+3. If bull expected value > bear expected value → **Buy** or **Overweight**.
+4. If bear expected value > bull expected value → **Underweight** or **Sell**.
+5. Reserve **Hold** ONLY when the two sides are mathematically equivalent in probability and magnitude — not merely when minor conflicting signals exist.
+6. When uncertain between two adjacent ratings (e.g., Buy vs Overweight), pick the more actionable one.
 
 **Context:**
 - Research Manager's investment plan: **{research_plan}**
 - Trader's transaction proposal: **{trader_plan}**
-{lessons_line}
-**Risk Analysts Debate History:**
+{lessons_line}**Risk Analysts Debate History:**
 {history}
 
 ---
 
-Ground every conclusion in specific evidence from the analysts. Commit to a directional call only when the evidence clearly supports one; choose Hold when the case is balanced, materially conflicting, ambiguous, or insufficient to justify changing exposure, rather than forcing a direction to appear decisive. Weigh the analysts on their merits, independent of speaking order.
+Ground every conclusion in specific evidence from the analysts. Be decisive — markets reward conviction backed by evidence, not cautious neutrality. A wrong directional call with a defined stop-loss is far more useful than a perpetual Hold.
 
 {NO_EXTERNAL_TOOLS}{get_language_instruction()}"""
 
