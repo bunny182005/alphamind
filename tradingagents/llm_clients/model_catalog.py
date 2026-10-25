@@ -101,6 +101,7 @@ MODEL_OPTIONS: ProviderModeOptions = {
             ("GPT-5.6 Luna - Fast, cost-efficient frontier", "gpt-5.6-luna"),
             ("GPT-5.6 Terra - Balances intelligence and cost", "gpt-5.6-terra"),
             ("GPT-5.4 Mini - Fast, strong coding and tool use", "gpt-5.4-mini"),
+            ("GPT-5.4 Nano - Ultra-fast, lightweight frontier", "gpt-5.4-nano"),
         ],
         "deep": [
             ("GPT-5.6 - Latest frontier reasoning (Sol)", "gpt-5.6"),
