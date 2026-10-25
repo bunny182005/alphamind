@@ -107,8 +107,14 @@ function LaserConnector({ fromStatus }: { fromStatus: NodeStatus }) {
 }
 
 export default function PipelineDAG({ nodeStatus, isRunning }: Props) {
+  // elapsed is only ever updated from inside the setInterval callback,
+  // never synchronously in the effect body — this is the pattern React
+  // recommends for syncing with an external clock system.
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // startTime lives in a ref so we can read it inside the interval callback
+  // without re-creating the closure on every render.
+  const startTimeRef = useRef<number>(0);
 
   // Count done nodes
   const doneCount = NODES.filter(n => nodeStatus[n.id] === 'done').length;
@@ -118,8 +124,12 @@ export default function PipelineDAG({ nodeStatus, isRunning }: Props) {
 
   useEffect(() => {
     if (isRunning) {
-      setElapsed(0);
-      timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
+      startTimeRef.current = Date.now();
+      // All setState calls live inside the interval callback, not in the
+      // synchronous effect body — satisfying the set-state-in-effect lint rule.
+      timerRef.current = setInterval(() =>
+        setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000))
+      , 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }

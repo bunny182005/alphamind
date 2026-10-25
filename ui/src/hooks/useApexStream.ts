@@ -256,6 +256,11 @@ export function useApexStream() {
 
       case 'done': {
         const result = data as unknown as PropagateResult;
+        // Close SSE before updating state so onerror is never triggered
+        if (sseRef.current) {
+          sseRef.current.close();
+          sseRef.current = null;
+        }
         setRunState(prev => ({ ...prev, phase: 'done', result }));
         // Force ALL nodes to done
         setNodeStatus(() => {
@@ -269,6 +274,11 @@ export function useApexStream() {
       }
 
       case 'fatal_error':
+        // Close SSE before updating state so onerror is never triggered
+        if (sseRef.current) {
+          sseRef.current.close();
+          sseRef.current = null;
+        }
         setRunState(prev => ({ ...prev, phase: 'error', error: data.error as string }));
         pushLog({ type: 'error', content: `FATAL: ${data.error}` });
         if (activeNodeRef.current) {
@@ -300,15 +310,31 @@ export function useApexStream() {
 
     sse.onmessage = (e) => handleSseEvent(e.data);
     sse.onerror = () => {
+      // If the run finished normally, the server closes the stream which
+      // fires onerror — suppress spurious errors when already done/closed.
+      if (sse.readyState === EventSource.CLOSED) return;
+      setRunState(prev => (prev.phase === 'running' ? { ...prev, phase: 'error', error: 'Connection to server lost or failed' } : prev));
       pushLog({ type: 'error', content: 'SSE connection error' });
+      if (sseRef.current) {
+        sseRef.current.close();
+        sseRef.current = null;
+      }
     };
 
     try {
-      await fetch(`${API_BASE}/api/propagate`, {
+      const res = await fetch(`${API_BASE}/api/propagate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticker, date, selected_analysts: selectedAnalysts, run_id: runId }),
       });
+      if (!res.ok) {
+        let detail = `Server error ${res.status}`;
+        try {
+          const body = await res.json();
+          if (body?.detail) detail = String(body.detail);
+        } catch { /* ignore parse failure */ }
+        throw new Error(detail);
+      }
     } catch (err) {
       setRunState(prev => ({ ...prev, phase: 'error', error: String(err) }));
       pushLog({ type: 'error', content: `Network error: ${err}` });
