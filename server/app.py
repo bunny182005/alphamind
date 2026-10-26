@@ -133,12 +133,12 @@ class ReflectRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Apex Quant server starting on :8000")
+    logger.info("AlphaMind server starting on :8000")
     yield
-    logger.info("Apex Quant server shutting down.")
+    logger.info("AlphaMind server shutting down.")
 
 
-app = FastAPI(title="Apex Quant API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="AlphaMind API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -278,7 +278,7 @@ async def reflect(req: ReflectRequest):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "Apex Quant API"}
+    return {"status": "ok", "service": "AlphaMind API"}
 
 
 if __name__ == "__main__":

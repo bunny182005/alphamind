@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    service: str = "Apex Quant API"
+    service: str = "AlphaMind API"
     version: str = "1.0.0"
 
 

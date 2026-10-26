@@ -33,7 +33,7 @@ export default function Header({ ticker, date, isRunning, onTickerChange, onDate
         </div>
         <div>
           <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 13, color: 'var(--slate-100)', letterSpacing: '0.1em' }}>
-            APEX QUANT
+            ALPHAMIND
           </div>
           <div style={{ fontSize: 9, color: 'var(--slate-400)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
             Multi-Agent Intelligence Terminal

@@ -6,7 +6,7 @@ from server.models import HealthResponse, StreamEvent
 def test_health_response_defaults():
     res = HealthResponse()
     assert res.status == "ok"
-    assert res.service == "Apex Quant API"
+    assert res.service == "AlphaMind API"
 
 
 def test_stream_event_serialization():

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ── Apex Quant Launcher ─────────────────────────────────────────
+# ── AlphaMind Launcher ──────────────────────────────────────────
 # Starts the FastAPI bridge server + React UI dev server.
 # Usage: ./start_apex.sh
 set -e
@@ -9,7 +9,7 @@ VENV="$ROOT/.venv"
 UI="$ROOT/ui"
 
 echo "┌─────────────────────────────────────────────────┐"
-echo "│        APEX QUANT — Institutional Terminal       │"
+echo "│        ALPHAMIND — Institutional Terminal        │"
 echo "│  TradingAgents Bridge + React UI Launcher        │"
 echo "└─────────────────────────────────────────────────┘"
 echo ""
@@ -41,7 +41,7 @@ echo "  PID=$UI_PID"
 
 echo ""
 echo "┌─────────────────────────────────────────────────┐"
-echo "│  ✓ Apex Quant running                            │"
+echo "│  ✓ AlphaMind running                             │"
 echo "│    API : http://localhost:8000                   │"
 echo "│    UI  : http://localhost:5173                   │"
 echo "│                                                   │"

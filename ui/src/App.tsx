@@ -118,7 +118,7 @@ export default function App() {
         fontFamily: 'var(--font-mono)',
         color: 'var(--slate-500)',
       }}>
-        <span style={{ color: 'var(--emerald)' }}>● APEX QUANT v1.0</span>
+        <span style={{ color: 'var(--emerald)' }}>● ALPHAMIND v1.0</span>
         <span>CONNECTED: localhost:8000</span>
         <span>{ticker} | {date}</span>
         <span style={{ color: isRunning ? 'var(--cyan)' : runState.phase === 'done' ? 'var(--emerald)' : 'var(--slate-600)' }}>
