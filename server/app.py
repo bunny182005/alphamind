@@ -57,16 +57,69 @@ def _push(run_id: str, event_type: str, data: dict):
 
 class StreamingCallbackHandler(BaseCallbackHandler):
     """Intercepts LLM token streams, tool calls, and agent events; pushes them
-    to the per-run SSE queue. The tradingagents library is never modified."""
+    to the per-run SSE queue. The tradingagents library is never modified.
+
+    Explicit ``node_start`` / ``node_end`` events are pushed when LangGraph
+    node names are recognised so the UI can progress the DAG animation without
+    relying on fragile text-chunk guessing.
+
+    Node mapping rationale:
+    - ``Trader`` runs BEFORE the risk debate (bridges debate→risk layer) so it
+      maps to ``risk-assess``, not ``decision``.
+    - The three risk debators (Aggressive/Conservative/Neutral Analyst) also map
+      to ``risk-assess`` — they all belong to the same UI step.
+    - ``Portfolio Manager`` is the only node that maps to ``decision``.
+    """
+
+    # Map every LangGraph node name (as seen in serialized["name"]) to the
+    # canonical UI pipeline node ID.
+    _LANGGRAPH_NODE_MAP: dict[str, str] = {
+        # Analyst layer
+        "Market Analyst":         "analyst-market",
+        "Social Analyst":         "analyst-social",
+        "News Analyst":           "analyst-news",
+        "Fundamentals Analyst":   "analyst-fundamentals",
+        # Debate layer
+        "Bull Researcher":        "debate-bull",
+        "Bear Researcher":        "debate-bear",
+        "Research Manager":       "debate-judge",
+        # Risk layer — Trader bridges debate→risk; risk debators are all risk-assess
+        "Trader":                 "risk-assess",
+        "Aggressive Analyst":     "risk-assess",
+        "Conservative Analyst":   "risk-assess",
+        "Neutral Analyst":        "risk-assess",
+        # Decision layer — Portfolio Manager only
+        "Portfolio Manager":      "decision",
+    }
 
     def __init__(self, run_id: str):
         super().__init__()
         self.run_id = run_id
         self._current_agent: str = "unknown"
+        # Track the last UI node we emitted so we never emit node_start twice
+        # for the same node in a single run (risk debators re-enter risk-assess).
+        self._current_node: str | None = None
+
+    def _emit_node_start(self, agent_name: str) -> None:
+        """Push a node_start event if the agent name maps to a known UI node
+        and it is different from the currently-active node (monotonic forward)."""
+        node_id = self._LANGGRAPH_NODE_MAP.get(agent_name)
+        if node_id and node_id != self._current_node:
+            self._current_node = node_id
+            _push(self.run_id, "node_start", {"node": node_id, "agent": agent_name})
+
+    def _emit_node_end(self, agent_name: str) -> None:
+        """Push a node_end event when a known agent's LLM call finishes."""
+        node_id = self._LANGGRAPH_NODE_MAP.get(agent_name)
+        if node_id:
+            _push(self.run_id, "node_end", {"node": node_id, "agent": agent_name})
+
+    # ── LLM lifecycle ────────────────────────────────────────────────────────
 
     def on_llm_start(self, serialized: dict, prompts: list[str], **kwargs):
         agent = serialized.get("name", "LLM")
         self._current_agent = agent
+        self._emit_node_start(agent)
         _push(self.run_id, "llm_start", {"agent": agent})
 
     def on_llm_new_token(self, token: str, **kwargs):
@@ -76,10 +129,13 @@ class StreamingCallbackHandler(BaseCallbackHandler):
         content = ""
         with suppress(Exception):
             content = response.generations[0][0].text
+        self._emit_node_end(self._current_agent)
         _push(self.run_id, "llm_end", {"agent": self._current_agent, "content": content})
 
     def on_llm_error(self, error: Exception, **kwargs):
         _push(self.run_id, "error", {"agent": self._current_agent, "error": str(error)})
+
+    # ── Tool lifecycle ───────────────────────────────────────────────────────
 
     def on_tool_start(self, serialized: dict, input_str: str, **kwargs):
         tool_name = serialized.get("name", "tool")
@@ -90,6 +146,8 @@ class StreamingCallbackHandler(BaseCallbackHandler):
 
     def on_tool_error(self, error: Exception, **kwargs):
         _push(self.run_id, "tool_error", {"error": str(error)})
+
+    # ── Chain / agent lifecycle ──────────────────────────────────────────────
 
     def on_chain_start(self, serialized: dict, inputs: dict, **kwargs):
         name = serialized.get("name", "chain")

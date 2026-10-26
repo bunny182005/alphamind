@@ -81,7 +81,7 @@ export default function App() {
       >
         {/* Col 1: Pipeline DAG */}
         <div style={{ background: 'var(--obsidian-2)', overflowY: 'auto' }}>
-          <PipelineDAG nodeStatus={nodeStatus} isRunning={isRunning} />
+          <PipelineDAG nodeStatus={nodeStatus} isRunning={isRunning} runPhase={runState.phase} />
         </div>
 
         {/* Col 2: Log stream */}

@@ -9,6 +9,7 @@ import type { NodeStatus } from '../types';
 interface Props {
   nodeStatus: Record<string, NodeStatus>;
   isRunning: boolean;
+  runPhase: 'idle' | 'running' | 'done' | 'error';
 }
 
 interface DagNodeDef {
@@ -106,7 +107,7 @@ function LaserConnector({ fromStatus }: { fromStatus: NodeStatus }) {
   return <div className="dag-laser-idle" />;
 }
 
-export default function PipelineDAG({ nodeStatus, isRunning }: Props) {
+export default function PipelineDAG({ nodeStatus, isRunning, runPhase }: Props) {
   // elapsed is only ever updated from inside the setInterval callback,
   // never synchronously in the effect body — this is the pattern React
   // recommends for syncing with an external clock system.
@@ -212,12 +213,19 @@ export default function PipelineDAG({ nodeStatus, isRunning }: Props) {
                   status === 'thinking' ? 'dag-card-thinking' : '',
                   status === 'done'     ? 'dag-card-done'     : '',
                   status === 'error'    ? 'dag-card-error'    : '',
+                  // Extra completion glow on the decision node when the whole run is done
+                  node.id === 'decision' && runPhase === 'done' ? 'dag-card-complete' : '',
                 ].join(' ')}
                 style={
                   status === 'thinking' ? {
                     borderColor: border,
                     background: glow,
                     boxShadow: `0 0 20px ${glow}, 0 2px 8px rgba(0,0,0,0.4)`,
+                  } : node.id === 'decision' && runPhase === 'done' ? {
+                    borderColor: 'rgba(0,229,153,0.55)',
+                    background: 'rgba(0,229,153,0.10)',
+                    boxShadow: '0 0 28px rgba(0,229,153,0.25), 0 2px 8px rgba(0,0,0,0.4)',
+                    transition: 'all 0.6s ease',
                   } : status === 'done' ? {
                     borderColor: 'rgba(0,229,153,0.25)',
                     background: 'rgba(0,229,153,0.04)',

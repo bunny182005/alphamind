@@ -55,50 +55,64 @@ function detectNodeFromText(text: string): string | null {
   if (/(bear analyst|bear researcher|bear case|short thesis|bearish|downside risk|short case|sell thesis)/i.test(t))
     return 'debate-bear';
 
-  // Debate judge / investment plan
-  if (/(debate judge|investment plan|verdict|synthesis|judge|aggressive analyst|conservative analyst|risky analyst)/i.test(t))
+  // Debate judge / research manager / investment plan synthesis
+  if (/(debate judge|research manager|investment plan|verdict|synthesis|conviction.{0,20}thesis)/i.test(t))
     return 'debate-judge';
 
-  // Risk assessment
-  if (/(risk assess|position siz|risk.{0,10}reward|max drawdown|stop loss|volatility|var |portfolio risk)/i.test(t))
+  // Risk assessment — includes Trader (bridges debate→risk) and all risk debators
+  if (/(risk assess|position siz|risk.{0,10}reward|max drawdown|stop loss|volatility|var |portfolio risk|aggressive analyst|conservative analyst|neutral analyst|trade proposal|transaction proposal)/i.test(t))
     return 'risk-assess';
 
-  // Final decision / trader / portfolio manager
-  if (/(trader|portfolio manager|final (trade )?decision|final recommendation|execute|action: (buy|sell|hold))/i.test(t))
+  // Final decision — Portfolio Manager only (Trader is already mapped to risk-assess)
+  if (/(portfolio manager|final position rating|final recommendation|executive summary.*rating|rating: (buy|sell|hold|overweight|underweight))/i.test(t))
     return 'decision';
 
   return null;
 }
 
-// Map explicit agent name strings to node IDs (fallback for llm_start)
+// Map explicit agent name strings to node IDs (fallback for llm_start).
+// NOTE: Trader runs BEFORE the risk debate (it bridges debate→risk), so it
+// maps to risk-assess.  Portfolio Manager is the ONLY 'decision' entry.
 const AGENT_NODE_MAP: Record<string, string> = {
-  market:                'analyst-market',
-  market_analyst:        'analyst-market',
-  marketanalyst:         'analyst-market',
-  social:                'analyst-social',
-  social_analyst:        'analyst-social',
-  socialanalyst:         'analyst-social',
-  news:                  'analyst-news',
-  news_analyst:          'analyst-news',
-  newsanalyst:           'analyst-news',
-  fundamentals:          'analyst-fundamentals',
-  fundamentals_analyst:  'analyst-fundamentals',
-  fundamentalanalyst:    'analyst-fundamentals',
-  bull:                  'debate-bull',
-  bull_researcher:       'debate-bull',
-  bullresearcher:        'debate-bull',
-  bear:                  'debate-bear',
-  bear_researcher:       'debate-bear',
-  bearresearcher:        'debate-bear',
-  debate:                'debate-judge',
-  debate_judge:          'debate-judge',
-  debatejudge:           'debate-judge',
-  risk:                  'risk-assess',
-  risk_assess:           'risk-assess',
-  riskassess:            'risk-assess',
-  trader:                'decision',
-  portfolio_manager:     'decision',
-  portfoliomanager:      'decision',
+  market:                   'analyst-market',
+  market_analyst:           'analyst-market',
+  marketanalyst:            'analyst-market',
+  social:                   'analyst-social',
+  social_analyst:           'analyst-social',
+  socialanalyst:            'analyst-social',
+  news:                     'analyst-news',
+  news_analyst:             'analyst-news',
+  newsanalyst:              'analyst-news',
+  fundamentals:             'analyst-fundamentals',
+  fundamentals_analyst:     'analyst-fundamentals',
+  fundamentalanalyst:       'analyst-fundamentals',
+  bull:                     'debate-bull',
+  bull_researcher:          'debate-bull',
+  bullresearcher:           'debate-bull',
+  bear:                     'debate-bear',
+  bear_researcher:          'debate-bear',
+  bearresearcher:           'debate-bear',
+  // Research Manager synthesises the debate → maps to debate-judge
+  research_manager:         'debate-judge',
+  researchmanager:          'debate-judge',
+  debate:                   'debate-judge',
+  debate_judge:             'debate-judge',
+  debatejudge:              'debate-judge',
+  // Trader + all three risk debators → risk-assess
+  trader:                   'risk-assess',
+  trader_node:              'risk-assess',
+  risk:                     'risk-assess',
+  risk_assess:              'risk-assess',
+  riskassess:               'risk-assess',
+  aggressive_analyst:       'risk-assess',
+  aggressiveanalyst:        'risk-assess',
+  conservative_analyst:     'risk-assess',
+  conservativeanalyst:      'risk-assess',
+  neutral_analyst:          'risk-assess',
+  neutralanalyst:           'risk-assess',
+  // Portfolio Manager ONLY → decision
+  portfolio_manager:        'decision',
+  portfoliomanager:         'decision',
 };
 
 export function useApexStream() {
@@ -126,11 +140,22 @@ export function useApexStream() {
     return detectNodeFromText(nameOrContent);
   }, []);
 
-  // Mark a node thinking; automatically marks all prior nodes as done
+  // The index of the furthest node we have ever activated this run.
+  // Used to enforce strictly monotonic forward progression — the DAG can
+  // never jump backwards even if the server emits an out-of-order event.
+  const highWaterRef = useRef<number>(-1);
+
+  // Mark a node thinking; automatically marks all prior nodes as done.
+  // Respects the high-water mark: if the new node is earlier in the pipeline
+  // than the furthest node we've already activated, it is silently ignored.
   const activateNode = useCallback((nodeId: string) => {
+    const idx = NODE_ORDER.indexOf(nodeId);
+    if (idx < 0) return; // unknown node ID
     setNodeStatus(prev => {
+      const currentHigh = highWaterRef.current;
+      if (idx <= currentHigh) return prev; // never go backwards
+      highWaterRef.current = idx;
       const next = { ...prev };
-      const idx = NODE_ORDER.indexOf(nodeId);
       // All nodes before this one are done
       for (let i = 0; i < idx; i++) {
         if (next[NODE_ORDER[i]] !== 'done') next[NODE_ORDER[i]] = 'done';
@@ -254,6 +279,20 @@ export function useApexStream() {
         }
         break;
 
+      case 'node_start': {
+        // Explicit pipeline node activation from server — highest priority signal.
+        const nodeId = data.node as string;
+        if (nodeId) activateNode(nodeId);
+        break;
+      }
+
+      case 'node_end': {
+        // Explicit pipeline node completion from server.
+        const nodeId = data.node as string;
+        if (nodeId) completeNode(nodeId);
+        break;
+      }
+
       case 'done': {
         const result = data as unknown as PropagateResult;
         // Close SSE before updating state so onerror is never triggered
@@ -261,14 +300,23 @@ export function useApexStream() {
           sseRef.current.close();
           sseRef.current = null;
         }
-        setRunState(prev => ({ ...prev, phase: 'done', result }));
-        // Force ALL nodes to done
-        setNodeStatus(() => {
-          const all: Record<string, NodeStatus> = {};
-          NODE_ORDER.forEach(id => { all[id] = 'done'; });
-          return all;
+        // Smooth completion: briefly show the final 'decision' node as
+        // thinking (if it isn't already done) so its pulse animation fires,
+        // then flip everything to done one frame later.
+        setNodeStatus(prev => {
+          const next = { ...prev };
+          if (next['decision'] !== 'done') next['decision'] = 'thinking';
+          return next;
         });
-        activeNodeRef.current = null;
+        setTimeout(() => {
+          setNodeStatus(() => {
+            const all: Record<string, NodeStatus> = {};
+            NODE_ORDER.forEach(id => { all[id] = 'done'; });
+            return all;
+          });
+          activeNodeRef.current = null;
+        }, 600);
+        setRunState(prev => ({ ...prev, phase: 'done', result }));
         pushLog({ type: 'status', content: `✅ Analysis complete — ${result.signal}` });
         break;
       }
@@ -299,6 +347,7 @@ export function useApexStream() {
     // Reset state
     setLogs([]);
     setNodeStatus({});
+    highWaterRef.current = -1;
     tokenBufferRef.current = '';
     activeNodeRef.current = null;
     setRunState({ phase: 'running', runId, ticker, date });
